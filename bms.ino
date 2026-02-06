@@ -1,10 +1,23 @@
 // Dan Cottam 2025
+// https://learn.adafruit.com/adafruit-bme680-humidity-temperature-barometic-pressure-voc-gas/
+// WiFi stuff from https://docs.arduino.cc/tutorials/uno-r4-wifi/wifi-examples/ mostly
+// https://arduinogetstarted.com/tutorials/arduino-mysql Doing SQL over HTTPS
+// https://github.com/chrissank/JKBMSInterface BMS library
+
 //
-// WiFi stuff 
-// https://docs.arduino.cc/tutorials/uno-r4-wifi/wifi-examples/ 
+//Onewire sensor stuff, nothing to do with BMS
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+// Power wire (RED) is connected to 5v
+// Ground wire (BLUE) is connected to Ground
+// Data wire (YELLOW) is connected to GPIO 4 
+#define ONE_WIRE_BUS 4
+
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature tempsensor(&oneWire);
 //
-// BMS Library
-// https://github.com/chrissank/JKBMSInterface
+//
 
 // Wifi and HTTP, so we can send data
 #include <WiFiS3.h>
@@ -29,12 +42,12 @@ String path = "/projects/jkbms/api/v1/sql"; // API endpoint for inserting data
 WiFiSSLClient wifi;
 HttpClient client = HttpClient(wifi, server, port);
 
-// BMS
+//BMS
 #include <JKBMSInterface.h>
 // Create BMS instance using Serial1 (specific to which Arduino you're on. Just Serial is the USB on my Uno R4)
 JKBMSInterface bms(&Serial1);
 
-// So we can communicate with the MaxScale API in JSON
+//So we can communicate with the MaxScale API in JSON
 #include <ArduinoJson.h>
 String DBTARGET   = SECRET_DBTARGET;
 String DB         = SECRET_DB;
@@ -57,7 +70,7 @@ void setup() {
         delay(10000);
     }
 
-    // print your boards IP address:
+    // print your board's IP address:
     IPAddress ip = WiFi.localIP();
     Serial.print("IP Address: ");
     Serial.println(ip);
@@ -65,6 +78,9 @@ void setup() {
     // Initialize BMS communication (UART ports 0 and 1 on Uno R4)
     Serial1.begin(115200, SERIAL_8N1);
     bms.begin(115200);
+
+    // Initialise OneWire sensor
+    tempsensor.begin();
 }
 
 void loop() {
@@ -73,6 +89,11 @@ void loop() {
 
     // Check if we have valid data
     if (bms.isDataValid()) {
+
+        //Get OneWire temp sensor at the same time as we do the BMS
+        tempsensor.requestTemperatures(); 
+        delay(750); 
+        float onewiretempC = tempsensor.getTempCByIndex(0);
 
         // Create body data for connection token POST request
         JsonDocument TokenRequest;
@@ -102,7 +123,7 @@ void loop() {
 
         // Create body data for data POST request
         JsonDocument InsertRequest;
-        InsertRequest["sql"] = "INSERT INTO " + String(SECRET_DBTABLE) + "(date,voltage,current,soc,cycles,power_temp,battery_temp,cell0_voltage,cell1_voltage,cell2_voltage,cell3_voltage,cell_voltage_delta,charging_enabled,discharging_enabled,ischarging,isdischarging) VALUES (CURRENT_TIMESTAMP," + String(bms.getVoltage(), 3) + "," + String(bms.getCurrent(), 3) + "," + String(bms.getSOC()) + "," + String(bms.getCycles()) + "," + String(bms.getPowerTemp(), 2) + "," + String(bms.getBatteryTemp(), 2) + "," + String(bms.getCellVoltage(0), 3) + "," + String(bms.getCellVoltage(1), 3) + "," + String(bms.getCellVoltage(2), 3) + "," + String(bms.getCellVoltage(3), 3) + "," + String(bms.getCellVoltageDelta(), 3) + "," + String(bms.isChargingEnabled()) + "," + String(bms.isDischargingEnabled()) + "," + String(bms.isCharging()) + "," + String(bms.isDischarging()) + ");";
+        InsertRequest["sql"] = "INSERT INTO " + String(SECRET_DBTABLE) + "(date,voltage,current,soc,cycles,power_temp,battery_temp,cell0_voltage,cell1_voltage,cell2_voltage,cell3_voltage,cell_voltage_delta,charging_enabled,discharging_enabled,ischarging,isdischarging,onewire) VALUES (CURRENT_TIMESTAMP," + String(bms.getVoltage(), 3) + "," + String(bms.getCurrent(), 3) + "," + String(bms.getSOC()) + "," + String(bms.getCycles()) + "," + String(bms.getPowerTemp(), 2) + "," + String(bms.getBatteryTemp(), 2) + "," + String(bms.getCellVoltage(0), 3) + "," + String(bms.getCellVoltage(1), 3) + "," + String(bms.getCellVoltage(2), 3) + "," + String(bms.getCellVoltage(3), 3) + "," + String(bms.getCellVoltageDelta(), 3) + "," + String(bms.isChargingEnabled()) + "," + String(bms.isDischargingEnabled()) + "," + String(bms.isCharging()) + "," + String(bms.isDischarging()) + "," + String(onewiretempC) + ");";
         String jsonInsertRequest;
         serializeJson(InsertRequest, jsonInsertRequest);
 
