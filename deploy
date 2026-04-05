@@ -1,0 +1,25 @@
+#Put your ino file and secrets file in a folder with the same name as the ino and cd there
+
+#deps
+arduino-cli core install arduino:renesas_uno
+arduino-cli lib install "OneWire"
+arduino-cli lib install "DallasTemperature"
+arduino-cli lib install "ArduinoHttpClient"
+arduino-cli lib install "ArduinoJson"
+
+#This only installs the original unpatched library! Some day it might install the most recent library
+#arduino-cli lib install "JKBMSInterface" 
+
+#Install the library we've actually tested a bit with
+arduino-cli config set library.enable_unsafe_install true
+wget https://github.com/chrissank/JKBMSInterface/archive/refs/tags/v1.1.0.zip
+arduino-cli lib install --zip-path v1.1.0.zip
+
+#make a build folder
+mkdir ./build
+
+#build
+arduino-cli compile --fqbn "arduino:renesas_uno:unor4wifi" --build-path ./build ./bms.ino
+
+#upload
+arduino-cli upload --fqbn "arduino:renesas_uno:unor4wifi" --port "/dev/ttyACM0" --input-dir ./build
